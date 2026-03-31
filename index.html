@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Download 3D MAZE - Versão Deluxe</title>
+    <style>
+        body { background: #0a0a0a; color: #0f0; font-family: 'Courier New', monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+        .box { border: 2px solid #0f0; padding: 40px; border-radius: 10px; background: #111; box-shadow: 0 0 30px rgba(0,255,0,0.1); }
+        button { padding: 15px 30px; font-size: 1.2rem; background: #0f0; color: #000; border: none; cursor: pointer; font-weight: bold; margin-top: 20px; }
+        button:hover { background: #fff; }
+        .new-tag { font-size: 0.8rem; background: #f00; color: #fff; padding: 2px 5px; vertical-align: top; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>3D MAZE: DELUXE EDITION</h1>
+        <p>Incluso: <span class="new-tag">NOVO</span> Efeitos Sonoros & Sistema de Recorde</p>
+        <button onclick="downloadGame()">BAIXAR AGORA (.HTML)</button>
+    </div>
+
+<script>
+function downloadGame() {
+    const gameCode = `<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>3D MAZE - DELUXE</title>
+    <style>
+        body { margin: 0; background: #000; color: #fff; font-family: 'Courier New', monospace; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #game-container { position: relative; width: 800px; height: 400px; border: 4px solid #333; background: #000; }
+        #start-screen, #win-screen { position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 200; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; pointer-events: none; visibility: hidden; }
+        #minimap { position: absolute; top: 10px; right: 10px; border: 2px solid #444; background: #000; visibility: hidden; z-index: 10; }
+        .bar { width: 120px; height: 10px; border: 1px solid #fff; background: #111; margin: 5px 0; }
+        #battery-fill { width: 100%; height: 100%; background: #0f0; }
+        button { padding: 15px 30px; font-size: 20px; background: #222; color: #0f0; border: 2px solid #0f0; cursor: pointer; margin-top: 20px; }
+        #high-score { font-size: 0.8em; color: #888; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="start-screen">
+            <h1 style="color: #0f0;">3D MAZE</h1>
+            <p>Encontre a CHAVE (🔑) e vá para o PORTAL (🌟)</p>
+            <div id="high-score">RECORDE: NÍVEL <span id="record-val">1</span></div>
+            <button onclick="startGame()">INICIAR JOGO</button>
+        </div>
+        <canvas id="screen" width="800" height="400"></canvas>
+        <canvas id="minimap" width="150" height="150"></canvas>
+        <div id="ui">
+            <div id="lvl-text">NÍVEL: 1</div>
+            <div id="key-status">CHAVE: ❌</div>
+            BATERIA <div class="bar"><div id="battery-fill"></div></div>
+        </div>
+        <div id="win-screen" style="display:none;">
+            <h1 style="color: #ffd700;">NÍVEL CONCLUÍDO!</h1>
+            <button onclick="nextLevel()">PRÓXIMO NÍVEL</button>
+        </div>
+    </div>
+
+<script>
+// --- ÁUDIO ENGINE ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playSound(freq, type, duration) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + duration);
+}
+
+// --- LÓGICA DO JOGO ---
+let TILE = 64, MAP_SIZE = 15, FOV = Math.PI / 3;
+const canvas = document.getElementById('screen'), ctx = canvas.getContext('2d');
+const mCanvas = document.getElementById('minimap'), mCtx = mCanvas.getContext('2d');
+let map = [], items = [], visited = [], keys = {}, gameStarted = false, hasKey = false, currentLevel = 1;
+let player = { x: 0, y: 0, dir: 1.5, battery: 100 };
+let exitPortal = { x: 0, y: 0 }, keyObj = { x: 0, y: 0 };
+
+// Carregar Recorde
+const record = localStorage.getItem('mazeHighScore') || 1;
+document.getElementById('record-val').innerText = record;
+
+function genMap() {
+    map = Array(MAP_SIZE).fill().map(() => Array(MAP_SIZE).fill(1));
+    visited = Array(MAP_SIZE).fill().map(() => Array(MAP_SIZE).fill(false));
+    function walk(x, y) {
+        map[y][x] = 0;
+        let dirs = [[0,-2],[0,2],[-2,0],[2,0]].sort(() => Math.random() - 0.5);
+        for(let [dx, dy] of dirs) {
+            let nx = x+dx, ny = y+dy;
+            if(nx>0 && nx<MAP_SIZE-1 && ny>0 && ny<MAP_SIZE-1 && map[ny][nx] == 1) {
+                map[y+dy/2][x+dx/2] = 0; walk(nx, ny);
+            }
+        }
+    }
+    walk(1, 1);
+    player.x = TILE * 1.5; player.y = TILE * 1.5;
+    exitPortal = { x: (MAP_SIZE-2)*TILE + TILE/2, y: (MAP_SIZE-2)*TILE + TILE/2 };
+    keyObj = { x: (MAP_SIZE-2)*TILE + TILE/2, y: TILE * 1.5 };
+    items = [];
+    for(let i=0; i < 6; i++) {
+        let rx, ry;
+        do { rx = Math.floor(Math.random()*MAP_SIZE); ry = Math.floor(Math.random()*MAP_SIZE); } while(map[ry][rx] !== 0);
+        items.push({x: rx*TILE + TILE/2, y: ry*TILE + TILE/2, t: 'B'});
+    }
+}
+
+function startGame() {
+    audioCtx.resume();
+    document.getElementById('start-screen').style.display = 'none';
+    document.getElementById('ui').style.visibility = 'visible';
+    mCanvas.style.visibility = 'visible';
+    genMap(); gameStarted = true; update();
+    playSound(440, 'sine', 0.1);
+}
+
+function nextLevel() {
+    currentLevel++;
+    if(currentLevel > localStorage.getItem('mazeHighScore')) localStorage.setItem('mazeHighScore', currentLevel);
+    MAP_SIZE += 4; hasKey = false; player.battery = 100;
+    document.getElementById('lvl-text').innerText = "NÍVEL: " + currentLevel;
+    document.getElementById('key-status').innerText = "CHAVE: ❌";
+    document.getElementById('win-screen').style.display = 'none';
+    genMap(); playSound(523, 'square', 0.2);
+}
+
+function drawMinimap() {
+    mCtx.fillStyle = "#000"; mCtx.fillRect(0,0,150,150);
+    let s = 150 / MAP_SIZE;
+    let px = Math.floor(player.x/TILE), py = Math.floor(player.y/TILE);
+    for(let y=-2; y<=2; y++) for(let x=-2; x<=2; x++) {
+        if(py+y>=0 && py+y<MAP_SIZE && px+x>=0 && px+x<MAP_SIZE) visited[py+y][px+x] = true;
+    }
+    for(let y=0; y<MAP_SIZE; y++) for(let x=0; x<MAP_SIZE; x++) {
+        if(visited[y][x]) {
+            mCtx.fillStyle = map[y][x] ? "#444" : "#111";
+            mCtx.fillRect(x*s, y*s, s, s);
+        }
+    }
+    mCtx.fillStyle="#0f0"; mCtx.fillRect((player.x/TILE)*s-1, (player.y/TILE)*s-1, 3, 3);
+}
+
+function update() {
+    if (!gameStarted || document.getElementById('win-screen').style.display !== 'none') return;
+    player.battery = Math.max(0, player.battery - 0.04);
+    document.getElementById('battery-fill').style.width = player.battery + "%";
+
+    let mx = 0, my = 0;
+    if (keys['KeyW'] || keys['ArrowUp']) { mx = Math.cos(player.dir)*5; my = Math.sin(player.dir)*5; }
+    if (keys['KeyS'] || keys['ArrowDown']) { mx = -Math.cos(player.dir)*5; my = -Math.sin(player.dir)*5; }
+    if (keys['KeyA'] || keys['ArrowLeft']) player.dir -= 0.08;
+    if (keys['KeyD'] || keys['ArrowRight']) player.dir += 0.08;
+    if (map[Math.floor((player.y+my)/TILE)][Math.floor((player.x+mx)/TILE)] === 0) {
+        player.x += mx; player.y += my;
+    }
+
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, 800, 400);
+    for (let i = 0; i < 800; i++) {
+        let angle = (player.dir - FOV/2) + (i/800)*FOV;
+        let rx = Math.cos(angle), ry = Math.sin(angle), dist = 0, hit = false;
+        while (!hit && dist < 800) {
+            dist += 5;
+            let cx = Math.floor((player.x+rx*dist)/TILE), cy = Math.floor((player.y+ry*dist)/TILE);
+            if (cx<0 || cy<0 || cx>=MAP_SIZE || cy>=MAP_SIZE || map[cy][cx] == 1) hit = true;
+        }
+        dist *= Math.cos(angle - player.dir);
+        let h = (TILE * 400) / dist;
+        let fog = Math.max(0, 1 - (dist / (player.battery * 5 + 50)));
+        ctx.fillStyle = "rgb("+(20*fog)+","+(80*fog)+","+(200*fog)+")";
+        ctx.fillRect(i, 200 - h/2, 1, h);
+    }
+
+    let sprites = [...items.map(it=>({...it,t:'B'})), {...keyObj, t:'K'}, {...exitPortal, t:'P'}];
+    sprites.forEach(s => {
+        let dx = s.x - player.x, dy = s.y - player.y, dist = Math.sqrt(dx*dx + dy*dy);
+        let ang = Math.atan2(dy, dx) - player.dir;
+        if (ang < -Math.PI) ang += 2*Math.PI; if (ang > Math.PI) ang -= 2*Math.PI;
+        if (Math.abs(ang) < FOV && dist < 600) {
+            let sx = (0.5 * (ang / (FOV/2)) + 0.5) * 800, h = (TILE * 400) / dist;
+            ctx.globalAlpha = Math.max(0, 1 - (dist/500));
+            ctx.font = h + "px Arial";
+            let icon = s.t==='B'?"🔋": s.t==='K'?"🔑" : (hasKey?"🌟":"🔒");
+            ctx.fillText(icon, sx-h/2, 200+h/2);
+            ctx.globalAlpha = 1;
+        }
+        if (dist < 40) {
+            if(s.t==='K' && !hasKey) { 
+                hasKey = true; keyObj.x = -999; 
+                document.getElementById('key-status').innerText = "CHAVE: ✅"; 
+                playSound(880, 'triangle', 0.3);
+            }
+            if(s.t==='B') { 
+                player.battery = 100; items = items.filter(it=>it!==s); 
+                playSound(660, 'sine', 0.1);
+            }
+            if(s.t==='P' && hasKey) { 
+                document.getElementById('win-screen').style.display = 'flex'; 
+                playSound(1200, 'sine', 0.5);
+            }
+        }
+    });
+    drawMinimap();
+    requestAnimationFrame(update);
+}
+window.onkeydown = e => keys[e.code] = true;
+window.onkeyup = e => keys[e.code] = false;
+<\/script>
+</body>
+</html>`;
+
+    const blob = new Blob([gameCode], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '3D_Maze_Deluxe.html';
+    a.click();
+}
+</script>
+</body>
+</html>
